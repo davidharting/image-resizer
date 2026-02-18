@@ -18,15 +18,10 @@
       padding: 2rem 1rem;
     }
 
-    h1 {
-      font-size: 1.8rem;
-      margin-bottom: 1.5rem;
-    }
+    h1 { font-size: 1.8rem; margin-bottom: 0.25rem; }
+    .subtitle { color: #666; font-size: 0.95rem; margin-bottom: 1.5rem; max-width: 720px; text-align: center; line-height: 1.5; }
 
-    .container {
-      width: 100%;
-      max-width: 720px;
-    }
+    .container { width: 100%; max-width: 720px; }
 
     /* Drop zone */
     .dropzone {
@@ -38,25 +33,32 @@
       transition: border-color 0.2s, background 0.2s;
       background: #fff;
     }
-    .dropzone.active {
-      border-color: #4a90d9;
-      background: #eef4fc;
-    }
+    .dropzone.active { border-color: #4a90d9; background: #eef4fc; }
     .dropzone p { font-size: 1rem; color: #666; }
+    .dropzone .hint { font-size: 0.8rem; color: #999; margin-top: 0.5rem; }
     .dropzone input { display: none; }
 
-    /* Controls */
-    .controls {
+    /* Card shared style */
+    .card {
       display: none;
       margin-top: 1.5rem;
       background: #fff;
       border-radius: 12px;
       padding: 1.5rem;
     }
-    .controls.visible { display: block; }
+    .card.visible { display: block; }
+    .card h2 { font-size: 1.1rem; margin-bottom: 1rem; }
 
-    .field { margin-bottom: 1rem; }
-    .field label { display: block; font-weight: 600; margin-bottom: 0.35rem; font-size: 0.9rem; }
+    /* Source info card */
+    .source-info table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .source-info td { padding: 0.35rem 0; }
+    .source-info td:first-child { font-weight: 600; width: 130px; color: #555; }
+    .source-info td:last-child { color: #333; }
+
+    /* Controls */
+    .field { margin-bottom: 1.15rem; }
+    .field label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.9rem; }
+    .field .help { font-size: 0.8rem; color: #888; margin-bottom: 0.4rem; line-height: 1.4; }
     .field input[type="number"] {
       width: 100px;
       padding: 0.4rem 0.5rem;
@@ -91,65 +93,95 @@
     .actions { display: flex; gap: 0.75rem; margin-top: 1.25rem; flex-wrap: wrap; }
 
     button.primary {
-      background: #4a90d9;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      padding: 0.6rem 1.4rem;
-      font-size: 0.95rem;
-      cursor: pointer;
-      font-weight: 600;
+      background: #4a90d9; color: #fff; border: none; border-radius: 8px;
+      padding: 0.6rem 1.4rem; font-size: 0.95rem; cursor: pointer; font-weight: 600;
     }
     button.primary:hover { background: #3a7cc3; }
-
     button.secondary {
-      background: #fff;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      padding: 0.6rem 1.4rem;
-      font-size: 0.95rem;
-      cursor: pointer;
+      background: #fff; border: 1px solid #ccc; border-radius: 8px;
+      padding: 0.6rem 1.4rem; font-size: 0.95rem; cursor: pointer;
     }
     button.secondary:hover { background: #f0f0f0; }
 
-    /* Preview */
-    .preview {
-      display: none;
-      margin-top: 1.5rem;
+    /* Comparison */
+    .comparison { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .comparison .col { flex: 1; min-width: 240px; }
+    .comparison .col h3 { font-size: 0.95rem; margin-bottom: 0.5rem; color: #555; }
+    .comparison img {
+      max-width: 100%; max-height: 300px; border-radius: 8px; border: 1px solid #eee;
+    }
+    .comparison .stats {
+      margin-top: 0.5rem; font-size: 0.82rem; color: #666; line-height: 1.6;
+    }
+    .comparison .stats .delta {
+      display: inline-block; padding: 0.1rem 0.4rem; border-radius: 4px;
+      font-weight: 600; font-size: 0.78rem; margin-left: 0.35rem;
+    }
+    .comparison .stats .delta.smaller { background: #e6f4ea; color: #1a7f37; }
+    .comparison .stats .delta.larger { background: #fce8e6; color: #c5221f; }
+    .comparison .stats .delta.same { background: #eee; color: #666; }
+
+    /* How it works */
+    .how-it-works {
+      margin-top: 2rem;
       background: #fff;
       border-radius: 12px;
       padding: 1.5rem;
-      text-align: center;
+      max-width: 720px;
+      width: 100%;
     }
-    .preview.visible { display: block; }
-    .preview img {
-      max-width: 100%;
-      max-height: 400px;
-      border-radius: 8px;
-      border: 1px solid #eee;
+    .how-it-works h2 { font-size: 1.1rem; margin-bottom: 0.75rem; }
+    .how-it-works h3 { font-size: 0.95rem; margin-top: 1rem; margin-bottom: 0.35rem; color: #444; }
+    .how-it-works p, .how-it-works li {
+      font-size: 0.85rem; color: #555; line-height: 1.6;
     }
-    .preview .info {
-      margin-top: 0.75rem;
-      font-size: 0.85rem;
-      color: #666;
+    .how-it-works ul { padding-left: 1.25rem; margin-top: 0.25rem; }
+    .how-it-works li { margin-bottom: 0.25rem; }
+    .how-it-works code {
+      background: #f0f0f0; padding: 0.1rem 0.35rem; border-radius: 3px;
+      font-size: 0.82rem;
     }
   </style>
 </head>
 <body>
 
 <h1>Image Resizer</h1>
+<p class="subtitle">
+  Upload any image, resize it to exact pixel dimensions, and convert between
+  PNG, JPEG, and WebP &mdash; all processed locally in your browser. Nothing is uploaded to a server.
+</p>
 
 <div class="container">
+
   <!-- Upload -->
   <div class="dropzone" id="dropzone">
     <p>Drop an image here or click to upload</p>
+    <p class="hint">Supports any browser-readable image: PNG, JPEG, GIF, WebP, BMP, SVG, etc.</p>
     <input type="file" id="fileInput" accept="image/*">
   </div>
 
+  <!-- Source info -->
+  <div class="card source-info" id="sourceInfo">
+    <h2>Uploaded Image</h2>
+    <table>
+      <tr><td>File name</td><td id="srcName">-</td></tr>
+      <tr><td>MIME type</td><td id="srcType">-</td></tr>
+      <tr><td>File size</td><td id="srcSize">-</td></tr>
+      <tr><td>Dimensions</td><td id="srcDims">-</td></tr>
+    </table>
+  </div>
+
   <!-- Controls -->
-  <div class="controls" id="controls">
+  <div class="card" id="controls">
+    <h2>Resize Settings</h2>
+
     <div class="field">
       <label>Dimensions (px)</label>
+      <p class="help">
+        Set the output width and height in pixels. When the lock is active,
+        changing one value automatically adjusts the other to preserve the
+        original aspect ratio, preventing distortion.
+      </p>
       <div class="dimensions">
         <input type="number" id="widthInput" min="1" placeholder="Width">
         <span>&times;</span>
@@ -159,7 +191,13 @@
     </div>
 
     <div class="field">
-      <label>Format</label>
+      <label>Output Format</label>
+      <p class="help">
+        Choose the image encoding for the output file.
+        <strong>PNG</strong> is lossless and best for graphics, icons, or screenshots.
+        <strong>JPEG</strong> uses lossy compression and is best for photographs.
+        <strong>WebP</strong> is a modern format offering smaller files than JPEG at comparable quality.
+      </p>
       <select id="formatSelect">
         <option value="image/png">PNG</option>
         <option value="image/jpeg">JPEG</option>
@@ -169,6 +207,11 @@
 
     <div class="field" id="qualityField" style="display:none;">
       <label>Quality <span class="quality-value" id="qualityValue">92%</span></label>
+      <p class="help">
+        Controls the lossy compression level. Higher values preserve more detail
+        but produce larger files. Lower values reduce file size at the cost of
+        visible artifacts. This setting only applies to JPEG and WebP.
+      </p>
       <input type="range" id="qualityRange" min="1" max="100" value="92">
     </div>
 
@@ -178,17 +221,104 @@
     </div>
   </div>
 
-  <!-- Preview -->
-  <div class="preview" id="preview">
-    <img id="previewImg">
-    <div class="info" id="previewInfo"></div>
+  <!-- Side-by-side comparison -->
+  <div class="card" id="comparisonCard">
+    <h2>Comparison</h2>
+    <div class="comparison">
+      <div class="col">
+        <h3>Original</h3>
+        <img id="origImg">
+        <div class="stats" id="origStats"></div>
+      </div>
+      <div class="col">
+        <h3>Resized</h3>
+        <img id="resizedImg">
+        <div class="stats" id="resizedStats"></div>
+      </div>
+    </div>
   </div>
+
+</div><!-- .container -->
+
+<!-- How it works -->
+<div class="how-it-works">
+  <h2>How It Works</h2>
+  <p>
+    This tool runs entirely in your browser. Your images are never sent to a
+    server &mdash; all processing happens client-side using standard Web APIs.
+  </p>
+
+  <h3>Reading the file</h3>
+  <p>
+    When you upload or drop an image, the browser's
+    <code>FileReader</code> API reads it as a data URL. That URL is assigned to
+    an <code>&lt;img&gt;</code> element, which decodes the image into an
+    in-memory bitmap regardless of the original format.
+  </p>
+
+  <h3>Resizing</h3>
+  <p>
+    The decoded image is drawn onto an HTML
+    <code>&lt;canvas&gt;</code> element sized to your target dimensions using
+    <code>CanvasRenderingContext2D.drawImage()</code>. The browser's built-in
+    bilinear interpolation algorithm handles the resampling &mdash; scaling
+    pixels up or down to fill the new canvas.
+  </p>
+
+  <h3>Format conversion &amp; encoding</h3>
+  <p>
+    The resized canvas is exported via <code>canvas.toBlob()</code>, which
+    encodes the pixel data into the chosen format:
+  </p>
+  <ul>
+    <li>
+      <strong>PNG</strong> &mdash; Lossless compression using the DEFLATE
+      algorithm. Every pixel is preserved exactly, which makes files larger but
+      guarantees no quality loss. The quality slider has no effect.
+    </li>
+    <li>
+      <strong>JPEG</strong> &mdash; Lossy compression based on the Discrete
+      Cosine Transform (DCT). The image is split into 8&times;8 pixel blocks,
+      transformed into frequency coefficients, and quantized. The quality
+      slider controls how aggressively coefficients are discarded &mdash; lower
+      values mean more data is thrown away, producing smaller files with more
+      visible blocking artifacts.
+    </li>
+    <li>
+      <strong>WebP</strong> &mdash; A modern format developed by Google. In
+      lossy mode (used here) it applies predictive coding and an arithmetic
+      entropy coder, typically achieving 25&ndash;35% smaller files than JPEG at
+      equivalent visual quality. The quality slider works the same way as for
+      JPEG.
+    </li>
+  </ul>
+
+  <h3>Download</h3>
+  <p>
+    The encoded blob is turned into an object URL
+    (<code>URL.createObjectURL</code>) and assigned to a temporary
+    <code>&lt;a&gt;</code> link with a <code>download</code> attribute. Clicking
+    that link triggers the browser's native file-save dialog.
+  </p>
+
+  <h3>Privacy</h3>
+  <p>
+    Because everything uses client-side APIs (<code>FileReader</code>,
+    <code>&lt;canvas&gt;</code>, <code>toBlob</code>), your image data stays in
+    the browser's memory and is never transmitted over the network. Refreshing
+    or closing the page discards all data.
+  </p>
 </div>
 
 <script>
 (function () {
   const dropzone = document.getElementById("dropzone");
   const fileInput = document.getElementById("fileInput");
+  const sourceInfo = document.getElementById("sourceInfo");
+  const srcName = document.getElementById("srcName");
+  const srcType = document.getElementById("srcType");
+  const srcSize = document.getElementById("srcSize");
+  const srcDims = document.getElementById("srcDims");
   const controls = document.getElementById("controls");
   const widthInput = document.getElementById("widthInput");
   const heightInput = document.getElementById("heightInput");
@@ -199,14 +329,32 @@
   const qualityValue = document.getElementById("qualityValue");
   const resizeBtn = document.getElementById("resizeBtn");
   const resetBtn = document.getElementById("resetBtn");
-  const previewEl = document.getElementById("preview");
-  const previewImg = document.getElementById("previewImg");
-  const previewInfo = document.getElementById("previewInfo");
+  const comparisonCard = document.getElementById("comparisonCard");
+  const origImg = document.getElementById("origImg");
+  const origStats = document.getElementById("origStats");
+  const resizedImg = document.getElementById("resizedImg");
+  const resizedStats = document.getElementById("resizedStats");
 
-  let originalImage = null;  // HTMLImageElement
+  let originalImage = null;
+  let originalFile = null;
   let aspectRatio = 1;
   let lockRatio = true;
   let updatingDimension = false;
+
+  // --- Helpers ---
+
+  function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+  }
+
+  function sizeDelta(original, resized) {
+    if (original === resized) return '<span class="delta same">same size</span>';
+    const pct = Math.abs(((resized - original) / original) * 100).toFixed(1);
+    if (resized < original) return '<span class="delta smaller">' + pct + "% smaller</span>";
+    return '<span class="delta larger">' + pct + "% larger</span>";
+  }
 
   // --- Upload handling ---
 
@@ -224,6 +372,7 @@
   });
 
   function loadFile(file) {
+    originalFile = file;
     const reader = new FileReader();
     reader.onload = (e) => {
       const img = new Image();
@@ -232,19 +381,21 @@
         aspectRatio = img.width / img.height;
         widthInput.value = img.width;
         heightInput.value = img.height;
+
+        // Populate source info
+        srcName.textContent = file.name;
+        srcType.textContent = file.type || "unknown";
+        srcSize.textContent = formatBytes(file.size);
+        srcDims.textContent = img.width + " \u00d7 " + img.height + " px";
+        sourceInfo.classList.add("visible");
         controls.classList.add("visible");
-        showPreview(img.src, img.width, img.height, file.size);
+
+        // Hide comparison until a resize is performed
+        comparisonCard.classList.remove("visible");
       };
       img.src = e.target.result;
     };
     reader.readAsDataURL(file);
-  }
-
-  function showPreview(src, w, h, size) {
-    previewImg.src = src;
-    const kb = size ? (size / 1024).toFixed(1) + " KB" : "";
-    previewInfo.textContent = w + " \u00d7 " + h + (kb ? " \u2014 " + kb : "");
-    previewEl.classList.add("visible");
   }
 
   // --- Dimension locking ---
@@ -299,9 +450,25 @@
     ctx.drawImage(originalImage, 0, 0, w, h);
 
     canvas.toBlob((blob) => {
-      // Show resized preview
       const url = URL.createObjectURL(blob);
-      showPreview(url, w, h, blob.size);
+
+      // Build comparison
+      origImg.src = originalImage.src;
+      const origType = originalFile ? (originalFile.type || "unknown") : "unknown";
+      origStats.innerHTML =
+        originalImage.width + " &times; " + originalImage.height + " px<br>" +
+        origType + "<br>" +
+        formatBytes(originalFile ? originalFile.size : 0);
+
+      const fmtLabel = fmt === "image/png" ? "PNG" : fmt === "image/jpeg" ? "JPEG" : "WebP";
+      resizedImg.src = url;
+      resizedStats.innerHTML =
+        w + " &times; " + h + " px<br>" +
+        fmtLabel + "<br>" +
+        formatBytes(blob.size) + " " +
+        (originalFile ? sizeDelta(originalFile.size, blob.size) : "");
+
+      comparisonCard.classList.add("visible");
 
       // Trigger download
       const ext = fmt === "image/png" ? "png" : fmt === "image/jpeg" ? "jpg" : "webp";
@@ -318,9 +485,11 @@
 
   resetBtn.addEventListener("click", () => {
     originalImage = null;
+    originalFile = null;
     fileInput.value = "";
+    sourceInfo.classList.remove("visible");
     controls.classList.remove("visible");
-    previewEl.classList.remove("visible");
+    comparisonCard.classList.remove("visible");
     widthInput.value = "";
     heightInput.value = "";
     formatSelect.value = "image/png";
