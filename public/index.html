@@ -127,6 +127,23 @@
     .comparison .stats .delta.larger { background: #fce8e6; color: #c5221f; }
     .comparison .stats .delta.same { background: #eee; color: #666; }
 
+    /* Engine status */
+    .engine-status {
+      display: inline-block;
+      margin-bottom: 1rem;
+      font-size: 0.82rem;
+      padding: 0.25rem 0.7rem;
+      border-radius: 999px;
+      background: #fff3cd;
+      color: #856404;
+    }
+    .engine-status.ready { background: #d4edda; color: #155724; }
+    .engine-status.error { background: #f8d7da; color: #721c24; }
+
+    button.primary:disabled { background: #a0c4e8; cursor: default; }
+    .resize-spinner { display: none; margin-left: 0.5rem; }
+    .resize-spinner.active { display: inline-block; }
+
     .download-row {
       margin-top: 1rem;
       text-align: center;
@@ -169,8 +186,11 @@
 <h1>Image Resizer</h1>
 <p class="subtitle">
   Upload any image, resize it to exact pixel dimensions, and convert between
-  PNG, JPEG, and WebP &mdash; all processed locally in your browser. Nothing is uploaded to a server.
+  PNG, JPEG, and WebP &mdash; all processed locally in your browser using
+  <strong>libvips</strong> (via WebAssembly) for high-quality Lanczos resampling.
+  Nothing is uploaded to a server.
 </p>
+<div class="engine-status" id="engineStatus">Loading wasm-vips engine&hellip;</div>
 
 <div class="container">
 
@@ -237,7 +257,7 @@
     </div>
 
     <div class="actions">
-      <button class="primary" id="resizeBtn">Resize</button>
+      <button class="primary" id="resizeBtn" disabled>Resize<span class="resize-spinner" id="resizeSpinner"> &#8987;</span></button>
       <button class="secondary" id="resetBtn">Reset</button>
     </div>
   </div>
@@ -284,30 +304,45 @@
   <h2>How It Works</h2>
   <p>
     This tool runs entirely in your browser. Your images are never sent to a
-    server &mdash; all processing happens client-side using standard Web APIs.
+    server &mdash; all processing happens client-side using
+    <a href="https://github.com/kleisauke/wasm-vips" target="_blank">wasm-vips</a>,
+    a WebAssembly build of <strong>libvips</strong>, the same high-performance
+    image processing library used by sharp (Node.js) and many server-side pipelines.
+  </p>
+
+  <h3>Loading the engine</h3>
+  <p>
+    On first visit, the browser downloads a ~4.5 MB WebAssembly module
+    (<code>vips.wasm</code>) from a CDN and compiles it inside a
+    <strong>Web Worker</strong>. This keeps the UI responsive while the engine
+    initializes. Once loaded, the status badge turns green and the Resize button
+    becomes active. The browser caches the WASM file, so subsequent visits load
+    almost instantly.
   </p>
 
   <h3>Reading the file</h3>
   <p>
     When you upload or drop an image, the browser's
-    <code>FileReader</code> API reads it as a data URL. That URL is assigned to
-    an <code>&lt;img&gt;</code> element, which decodes the image into an
-    in-memory bitmap regardless of the original format.
+    <code>FileReader</code> API reads it as both an <code>ArrayBuffer</code>
+    (sent to the worker for processing) and a data URL (used for the preview
+    thumbnail). The raw bytes are passed directly to libvips, which can decode
+    JPEG, PNG, WebP, TIFF, GIF, and many other formats natively.
   </p>
 
   <h3>Resizing</h3>
   <p>
-    The decoded image is drawn onto an HTML
-    <code>&lt;canvas&gt;</code> element sized to your target dimensions using
-    <code>CanvasRenderingContext2D.drawImage()</code>. The browser's built-in
-    bilinear interpolation algorithm handles the resampling &mdash; scaling
-    pixels up or down to fill the new canvas.
+    The worker calls <code>vips.Image.thumbnailBuffer()</code>, which is
+    significantly more efficient than a na&iuml;ve decode-then-resize pipeline.
+    For JPEG inputs, it exploits the format's built-in 2&times;/4&times;/8&times;
+    shrink-on-load, drastically reducing memory use and CPU time for large
+    downscales. The resampling kernel is <strong>Lanczos3</strong>, a
+    high-quality windowed sinc filter that preserves sharp edges and fine detail
+    far better than the bilinear interpolation used by the HTML Canvas API.
   </p>
 
   <h3>Format conversion &amp; encoding</h3>
   <p>
-    The resized canvas is exported via <code>canvas.toBlob()</code>, which
-    encodes the pixel data into the chosen format:
+    After resizing, libvips encodes the result into the chosen format:
   </p>
   <ul>
     <li>
@@ -316,60 +351,42 @@
       guarantees no quality loss. The quality slider has no effect.
     </li>
     <li>
-      <strong>JPEG</strong> &mdash; Lossy compression based on the Discrete
-      Cosine Transform (DCT). The image is split into 8&times;8 pixel blocks,
-      transformed into frequency coefficients, and quantized. The quality
-      slider controls how aggressively coefficients are discarded &mdash; lower
-      values mean more data is thrown away, producing smaller files with more
-      visible blocking artifacts.
+      <strong>JPEG</strong> &mdash; Lossy compression with optimized Huffman
+      coding enabled. The quality slider controls quantization &mdash; lower
+      values discard more frequency coefficients, producing smaller files with
+      more visible artifacts.
     </li>
     <li>
-      <strong>WebP</strong> &mdash; A modern format developed by Google. In
-      lossy mode (used here) it applies predictive coding and an arithmetic
-      entropy coder, typically achieving 25&ndash;35% smaller files than JPEG at
-      equivalent visual quality. The quality slider works the same way as for
-      JPEG.
+      <strong>WebP</strong> &mdash; A modern format using predictive coding and
+      arithmetic entropy coding, typically achieving 25&ndash;35% smaller files
+      than JPEG at equivalent visual quality. The quality slider works the same
+      way as for JPEG.
     </li>
   </ul>
 
-  <h3>Why re-encoding can increase file size</h3>
+  <h3>EXIF metadata &amp; ICC profiles</h3>
   <p>
-    When you upload a JPEG and export it as JPEG at the same dimensions, the
-    output may be <em>larger</em> than the original. This is because the canvas
-    pipeline decodes the image to raw pixels and then re-encodes from scratch.
-    The original file's optimized Huffman tables and quantization matrices are
-    discarded during decoding. The browser's encoder builds new tables that may
-    be less efficient, and a nominal quality of 92% does not necessarily match
-    the original file's compression level. To get a smaller output, try lowering
-    the quality slider or switching to WebP.
-  </p>
-
-  <h3>EXIF metadata stripping</h3>
-  <p>
-    EXIF (Exchangeable Image File Format) metadata is embedded in JPEG and some
-    other image files by cameras and phones. It can include camera model, GPS
-    coordinates, date/time, orientation, and more. When an image passes through
-    the <code>&lt;canvas&gt;</code> pipeline, <strong>all EXIF data is
-    stripped</strong>. The canvas only operates on decoded pixel data &mdash; it
-    has no mechanism to read or preserve the metadata bytes from the original
-    file. This is actually a privacy benefit: resized images will never
-    accidentally leak location or device information.
+    EXIF data (camera model, GPS coordinates, date/time, etc.) is
+    <strong>stripped</strong> from the output for privacy. However,
+    <strong>ICC color profiles are preserved</strong>, so images maintain
+    accurate color rendering across displays. This is controlled via the
+    <code>ForeignKeep.icc</code> flag in libvips.
   </p>
 
   <h3>Download</h3>
   <p>
-    The encoded blob is turned into an object URL
-    (<code>URL.createObjectURL</code>) and assigned to a temporary
-    <code>&lt;a&gt;</code> link with a <code>download</code> attribute. Clicking
-    that link triggers the browser's native file-save dialog.
+    The encoded bytes are transferred from the worker back to the main thread,
+    wrapped in a <code>Blob</code>, and turned into an object URL
+    (<code>URL.createObjectURL</code>). Clicking Download triggers the
+    browser's native file-save dialog.
   </p>
 
   <h3>Privacy</h3>
   <p>
-    Because everything uses client-side APIs (<code>FileReader</code>,
-    <code>&lt;canvas&gt;</code>, <code>toBlob</code>), your image data stays in
-    the browser's memory and is never transmitted over the network. Refreshing
-    or closing the page discards all data.
+    Your image data never leaves the browser. The WASM engine, Web Worker, and
+    all encoding happen in local memory. Refreshing or closing the page
+    discards all data. The only network request is fetching the wasm-vips
+    library itself from a CDN.
   </p>
 </div>
 
@@ -572,11 +589,54 @@
 
   var originalImage = null;
   var originalFile = null;
+  var originalArrayBuffer = null;
   var lastBlobUrl = null;
   var lastBlobExt = null;
   var aspectRatio = 1;
   var lockRatio = true;
   var updatingDimension = false;
+  var workerReady = false;
+  var resizeIdCounter = 0;
+  var pendingResizes = {};
+
+  // --- Web Worker setup ---
+
+  var engineStatus = document.getElementById("engineStatus");
+  var resizeSpinner = document.getElementById("resizeSpinner");
+  var worker = new Worker("worker.js");
+
+  worker.onmessage = function (e) {
+    var msg = e.data;
+    if (msg.type === "ready") {
+      workerReady = true;
+      engineStatus.textContent = "wasm-vips ready (Lanczos3)";
+      engineStatus.classList.add("ready");
+      if (originalImage) resizeBtn.disabled = false;
+    } else if (msg.type === "result") {
+      var cb = pendingResizes[msg.id];
+      delete pendingResizes[msg.id];
+      if (cb) cb(null, new Blob([msg.buffer], { type: msg.format }));
+    } else if (msg.type === "error") {
+      var ecb = pendingResizes[msg.id];
+      delete pendingResizes[msg.id];
+      if (ecb) ecb(new Error(msg.error));
+    }
+  };
+
+  worker.onerror = function () {
+    engineStatus.textContent = "Failed to load wasm-vips";
+    engineStatus.classList.add("error");
+  };
+
+  function workerResize(arrayBuffer, width, height, format, quality, callback) {
+    var id = ++resizeIdCounter;
+    pendingResizes[id] = callback;
+    var copy = arrayBuffer.slice(0);
+    worker.postMessage(
+      { id: id, inputBuffer: copy, width: width, height: height, format: format, quality: quality },
+      [copy]
+    );
+  }
 
   // --- Helpers ---
 
@@ -611,10 +671,11 @@
   function loadFile(file) {
     originalFile = file;
 
-    // Read as ArrayBuffer first for EXIF parsing
+    // Read as ArrayBuffer for EXIF parsing + worker input
     var bufReader = new FileReader();
     bufReader.onload = function(ev) {
-      var exifTags = parseExif(ev.target.result);
+      originalArrayBuffer = ev.target.result;
+      var exifTags = parseExif(originalArrayBuffer);
       renderExifTable(exifTags, exifOriginal);
       exifResized.innerHTML = '<span class="exif-none">No resize performed yet</span>';
       exifCard.classList.add("visible");
@@ -637,6 +698,7 @@
         srcDims.textContent = img.width + " \u00d7 " + img.height + " px";
         sourceInfo.classList.add("visible");
         controls.classList.add("visible");
+        resizeBtn.disabled = !workerReady;
 
         comparisonCard.classList.remove("visible");
         lastBlobUrl = null;
@@ -682,22 +744,27 @@
     qualityValue.textContent = qualityRange.value + "%";
   });
 
-  // --- Resize (preview only) ---
+  // --- Resize via wasm-vips worker ---
 
   resizeBtn.addEventListener("click", function() {
-    if (!originalImage) return;
+    if (!originalImage || !originalArrayBuffer || !workerReady) return;
     var w = Number(widthInput.value) || originalImage.width;
     var h = Number(heightInput.value) || originalImage.height;
     var fmt = formatSelect.value;
-    var q = (fmt === "image/jpeg" || fmt === "image/webp") ? Number(qualityRange.value) / 100 : undefined;
+    var q = (fmt === "image/jpeg" || fmt === "image/webp") ? Number(qualityRange.value) : 85;
 
-    var canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    var ctx = canvas.getContext("2d");
-    ctx.drawImage(originalImage, 0, 0, w, h);
+    resizeBtn.disabled = true;
+    resizeSpinner.classList.add("active");
 
-    canvas.toBlob(function(blob) {
+    workerResize(originalArrayBuffer, w, h, fmt, q, function(err, blob) {
+      resizeBtn.disabled = false;
+      resizeSpinner.classList.remove("active");
+
+      if (err) {
+        alert("Resize failed: " + err.message);
+        return;
+      }
+
       if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
       var url = URL.createObjectURL(blob);
       lastBlobUrl = url;
@@ -721,14 +788,14 @@
 
       comparisonCard.classList.add("visible");
 
-      // Parse EXIF on the output blob to confirm it's stripped
+      // Parse EXIF on the output blob to confirm metadata is stripped
       var blobReader = new FileReader();
       blobReader.onload = function(ev) {
         var outTags = parseExif(ev.target.result);
         renderExifTable(outTags, exifResized);
       };
       blobReader.readAsArrayBuffer(blob);
-    }, fmt, q);
+    });
   });
 
   // --- Download (separate) ---
@@ -748,8 +815,10 @@
   resetBtn.addEventListener("click", function() {
     originalImage = null;
     originalFile = null;
+    originalArrayBuffer = null;
     if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
     lastBlobUrl = null;
+    resizeBtn.disabled = true;
     fileInput.value = "";
     sourceInfo.classList.remove("visible");
     controls.classList.remove("visible");
