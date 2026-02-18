@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image Resizer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 720px;
+    }
+
+    /* Drop zone */
+    .dropzone {
+      border: 2px dashed #aaa;
+      border-radius: 12px;
+      padding: 3rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      background: #fff;
+    }
+    .dropzone.active {
+      border-color: #4a90d9;
+      background: #eef4fc;
+    }
+    .dropzone p { font-size: 1rem; color: #666; }
+    .dropzone input { display: none; }
+
+    /* Controls */
+    .controls {
+      display: none;
+      margin-top: 1.5rem;
+      background: #fff;
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+    .controls.visible { display: block; }
+
+    .field { margin-bottom: 1rem; }
+    .field label { display: block; font-weight: 600; margin-bottom: 0.35rem; font-size: 0.9rem; }
+    .field input[type="number"] {
+      width: 100px;
+      padding: 0.4rem 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 0.95rem;
+    }
+    .field .dimensions { display: flex; align-items: center; gap: 0.5rem; }
+    .field .dimensions span { color: #999; }
+
+    .lock-btn {
+      background: none;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 0.3rem 0.5rem;
+      cursor: pointer;
+      font-size: 0.85rem;
+      color: #555;
+    }
+    .lock-btn.locked { background: #eef4fc; border-color: #4a90d9; color: #4a90d9; }
+
+    .field select, .field input[type="range"] {
+      padding: 0.4rem 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 0.95rem;
+    }
+    .field input[type="range"] { width: 200px; vertical-align: middle; }
+
+    .quality-value { font-size: 0.85rem; color: #666; margin-left: 0.5rem; }
+
+    .actions { display: flex; gap: 0.75rem; margin-top: 1.25rem; flex-wrap: wrap; }
+
+    button.primary {
+      background: #4a90d9;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.6rem 1.4rem;
+      font-size: 0.95rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button.primary:hover { background: #3a7cc3; }
+
+    button.secondary {
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 0.6rem 1.4rem;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+    button.secondary:hover { background: #f0f0f0; }
+
+    /* Preview */
+    .preview {
+      display: none;
+      margin-top: 1.5rem;
+      background: #fff;
+      border-radius: 12px;
+      padding: 1.5rem;
+      text-align: center;
+    }
+    .preview.visible { display: block; }
+    .preview img {
+      max-width: 100%;
+      max-height: 400px;
+      border-radius: 8px;
+      border: 1px solid #eee;
+    }
+    .preview .info {
+      margin-top: 0.75rem;
+      font-size: 0.85rem;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Image Resizer</h1>
+
+<div class="container">
+  <!-- Upload -->
+  <div class="dropzone" id="dropzone">
+    <p>Drop an image here or click to upload</p>
+    <input type="file" id="fileInput" accept="image/*">
+  </div>
+
+  <!-- Controls -->
+  <div class="controls" id="controls">
+    <div class="field">
+      <label>Dimensions (px)</label>
+      <div class="dimensions">
+        <input type="number" id="widthInput" min="1" placeholder="Width">
+        <span>&times;</span>
+        <input type="number" id="heightInput" min="1" placeholder="Height">
+        <button class="lock-btn locked" id="lockAspect" title="Lock aspect ratio">Lock</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Format</label>
+      <select id="formatSelect">
+        <option value="image/png">PNG</option>
+        <option value="image/jpeg">JPEG</option>
+        <option value="image/webp">WebP</option>
+      </select>
+    </div>
+
+    <div class="field" id="qualityField" style="display:none;">
+      <label>Quality <span class="quality-value" id="qualityValue">92%</span></label>
+      <input type="range" id="qualityRange" min="1" max="100" value="92">
+    </div>
+
+    <div class="actions">
+      <button class="primary" id="resizeBtn">Resize &amp; Download</button>
+      <button class="secondary" id="resetBtn">Reset</button>
+    </div>
+  </div>
+
+  <!-- Preview -->
+  <div class="preview" id="preview">
+    <img id="previewImg">
+    <div class="info" id="previewInfo"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const dropzone = document.getElementById("dropzone");
+  const fileInput = document.getElementById("fileInput");
+  const controls = document.getElementById("controls");
+  const widthInput = document.getElementById("widthInput");
+  const heightInput = document.getElementById("heightInput");
+  const lockAspect = document.getElementById("lockAspect");
+  const formatSelect = document.getElementById("formatSelect");
+  const qualityField = document.getElementById("qualityField");
+  const qualityRange = document.getElementById("qualityRange");
+  const qualityValue = document.getElementById("qualityValue");
+  const resizeBtn = document.getElementById("resizeBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const previewEl = document.getElementById("preview");
+  const previewImg = document.getElementById("previewImg");
+  const previewInfo = document.getElementById("previewInfo");
+
+  let originalImage = null;  // HTMLImageElement
+  let aspectRatio = 1;
+  let lockRatio = true;
+  let updatingDimension = false;
+
+  // --- Upload handling ---
+
+  dropzone.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files.length) loadFile(fileInput.files[0]);
+  });
+  dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("active"); });
+  dropzone.addEventListener("dragleave", () => dropzone.classList.remove("active"));
+  dropzone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropzone.classList.remove("active");
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith("image/")) loadFile(file);
+  });
+
+  function loadFile(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        originalImage = img;
+        aspectRatio = img.width / img.height;
+        widthInput.value = img.width;
+        heightInput.value = img.height;
+        controls.classList.add("visible");
+        showPreview(img.src, img.width, img.height, file.size);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function showPreview(src, w, h, size) {
+    previewImg.src = src;
+    const kb = size ? (size / 1024).toFixed(1) + " KB" : "";
+    previewInfo.textContent = w + " \u00d7 " + h + (kb ? " \u2014 " + kb : "");
+    previewEl.classList.add("visible");
+  }
+
+  // --- Dimension locking ---
+
+  lockAspect.addEventListener("click", () => {
+    lockRatio = !lockRatio;
+    lockAspect.classList.toggle("locked", lockRatio);
+  });
+
+  widthInput.addEventListener("input", () => {
+    if (updatingDimension) return;
+    if (lockRatio && originalImage) {
+      updatingDimension = true;
+      heightInput.value = Math.round(Number(widthInput.value) / aspectRatio);
+      updatingDimension = false;
+    }
+  });
+
+  heightInput.addEventListener("input", () => {
+    if (updatingDimension) return;
+    if (lockRatio && originalImage) {
+      updatingDimension = true;
+      widthInput.value = Math.round(Number(heightInput.value) * aspectRatio);
+      updatingDimension = false;
+    }
+  });
+
+  // --- Format / quality ---
+
+  formatSelect.addEventListener("change", () => {
+    const fmt = formatSelect.value;
+    qualityField.style.display = (fmt === "image/jpeg" || fmt === "image/webp") ? "" : "none";
+  });
+
+  qualityRange.addEventListener("input", () => {
+    qualityValue.textContent = qualityRange.value + "%";
+  });
+
+  // --- Resize & download ---
+
+  resizeBtn.addEventListener("click", () => {
+    if (!originalImage) return;
+    const w = Number(widthInput.value) || originalImage.width;
+    const h = Number(heightInput.value) || originalImage.height;
+    const fmt = formatSelect.value;
+    const q = (fmt === "image/jpeg" || fmt === "image/webp") ? Number(qualityRange.value) / 100 : undefined;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(originalImage, 0, 0, w, h);
+
+    canvas.toBlob((blob) => {
+      // Show resized preview
+      const url = URL.createObjectURL(blob);
+      showPreview(url, w, h, blob.size);
+
+      // Trigger download
+      const ext = fmt === "image/png" ? "png" : fmt === "image/jpeg" ? "jpg" : "webp";
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "resized." + ext;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }, fmt, q);
+  });
+
+  // --- Reset ---
+
+  resetBtn.addEventListener("click", () => {
+    originalImage = null;
+    fileInput.value = "";
+    controls.classList.remove("visible");
+    previewEl.classList.remove("visible");
+    widthInput.value = "";
+    heightInput.value = "";
+    formatSelect.value = "image/png";
+    qualityRange.value = 92;
+    qualityValue.textContent = "92%";
+    qualityField.style.display = "none";
+  });
+})();
+</script>
+
+</body>
+</html>
