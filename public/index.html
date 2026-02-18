@@ -108,6 +108,12 @@
       padding: 0.6rem 1.4rem; font-size: 0.95rem; cursor: pointer; font-weight: 600;
     }
     button.download:hover { background: #278c41; }
+    button.strip {
+      background: #6f42c1; color: #fff; border: none; border-radius: 8px;
+      padding: 0.6rem 1.4rem; font-size: 0.95rem; cursor: pointer; font-weight: 600;
+    }
+    button.strip:hover { background: #5a32a3; }
+    button.strip:disabled { background: #b8a2d8; cursor: default; }
 
     /* Comparison */
     .comparison { display: flex; gap: 1rem; flex-wrap: wrap; }
@@ -258,6 +264,7 @@
 
     <div class="actions">
       <button class="primary" id="resizeBtn" disabled>Resize<span class="resize-spinner" id="resizeSpinner"> &#8987;</span></button>
+      <button class="strip" id="stripExifBtn">Strip EXIF Only</button>
       <button class="secondary" id="resetBtn">Reset</button>
     </div>
   </div>
@@ -366,11 +373,23 @@
 
   <h3>EXIF metadata &amp; ICC profiles</h3>
   <p>
-    EXIF data (camera model, GPS coordinates, date/time, etc.) is
-    <strong>stripped</strong> from the output for privacy. However,
-    <strong>ICC color profiles are preserved</strong>, so images maintain
+    When resizing, EXIF data (camera model, GPS coordinates, date/time, etc.)
+    is <strong>stripped</strong> from the output for privacy, while
+    <strong>ICC color profiles are preserved</strong> so images maintain
     accurate color rendering across displays. This is controlled via the
     <code>ForeignKeep.icc</code> flag in libvips.
+  </p>
+
+  <h3>Strip EXIF Only (lossless)</h3>
+  <p>
+    The <strong>Strip EXIF Only</strong> button removes EXIF metadata from a
+    JPEG <em>without re-encoding</em>. It works at the binary level: the JPEG
+    file is parsed segment-by-segment, and any APP1/Exif segments are removed
+    while the compressed image data is left completely untouched. This means
+    <strong>zero generation loss</strong> &mdash; every pixel remains
+    bit-identical to the original. The file size will decrease slightly (by the
+    size of the removed metadata). This is ideal when you just want to strip
+    GPS coordinates or camera info before sharing a photo.
   </p>
 
   <h3>Download</h3>
@@ -558,6 +577,65 @@
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  // --- Lossless binary EXIF strip (JPEG only) ---
+  // Removes APP1 (Exif) segments from JPEG bytes without re-encoding.
+  // Non-JPEG files are returned unchanged.
+
+  function stripExifBinary(arrayBuffer) {
+    var src = new Uint8Array(arrayBuffer);
+    // Must start with JPEG SOI marker FF D8
+    if (src.length < 4 || src[0] !== 0xFF || src[1] !== 0xD8) return arrayBuffer;
+
+    var pieces = [];
+    pieces.push(src.subarray(0, 2)); // SOI
+
+    var offset = 2;
+    while (offset < src.length - 1) {
+      if (src[offset] !== 0xFF) break;
+      var marker = (src[offset] << 8) | src[offset + 1];
+
+      // SOS (FF DA) — rest is image data, copy everything remaining
+      if (marker === 0xFFDA) {
+        pieces.push(src.subarray(offset));
+        break;
+      }
+
+      // Segments with length field
+      if (offset + 3 >= src.length) break;
+      var segLen = (src[offset + 2] << 8) | src[offset + 3];
+      var segEnd = offset + 2 + segLen;
+
+      if (marker === 0xFFE1) {
+        // APP1 — check if it's an Exif segment
+        var isExif = (offset + 7 < src.length &&
+          src[offset + 4] === 0x45 && // E
+          src[offset + 5] === 0x78 && // x
+          src[offset + 6] === 0x69 && // i
+          src[offset + 7] === 0x66);  // f
+        if (isExif) {
+          // Skip this segment entirely (strip it)
+          offset = segEnd;
+          continue;
+        }
+      }
+
+      // Keep this segment
+      pieces.push(src.subarray(offset, segEnd));
+      offset = segEnd;
+    }
+
+    // Concatenate pieces
+    var totalLen = 0;
+    for (var i = 0; i < pieces.length; i++) totalLen += pieces[i].length;
+    var out = new Uint8Array(totalLen);
+    var pos = 0;
+    for (var j = 0; j < pieces.length; j++) {
+      out.set(pieces[j], pos);
+      pos += pieces[j].length;
+    }
+    return out.buffer;
+  }
+
   // --- DOM refs ---
 
   var dropzone = document.getElementById("dropzone");
@@ -576,6 +654,7 @@
   var qualityRange = document.getElementById("qualityRange");
   var qualityValue = document.getElementById("qualityValue");
   var resizeBtn = document.getElementById("resizeBtn");
+  var stripExifBtn = document.getElementById("stripExifBtn");
   var resetBtn = document.getElementById("resetBtn");
   var comparisonCard = document.getElementById("comparisonCard");
   var origImg = document.getElementById("origImg");
@@ -798,13 +877,60 @@
     });
   });
 
+  // --- Strip EXIF only (lossless for JPEG) ---
+
+  stripExifBtn.addEventListener("click", function() {
+    if (!originalFile || !originalArrayBuffer) return;
+
+    var stripped = stripExifBinary(originalArrayBuffer);
+    var mime = originalFile.type || "application/octet-stream";
+    var blob = new Blob([stripped], { type: mime });
+
+    if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
+    var url = URL.createObjectURL(blob);
+    lastBlobUrl = url;
+
+    // Preserve original extension
+    var name = originalFile.name || "image";
+    var dotIdx = name.lastIndexOf(".");
+    lastBlobExt = dotIdx > 0 ? name.substring(dotIdx + 1) : "jpg";
+
+    // Build comparison
+    origImg.src = originalImage ? originalImage.src : "";
+    var origType = originalFile.type || "unknown";
+    var origW = originalImage ? originalImage.width : "?";
+    var origH = originalImage ? originalImage.height : "?";
+    origStats.innerHTML =
+      origW + " &times; " + origH + " px<br>" +
+      origType + "<br>" +
+      formatBytes(originalFile.size);
+
+    resizedImg.src = url;
+    resizedStats.innerHTML =
+      origW + " &times; " + origH + " px (unchanged)<br>" +
+      origType + "<br>" +
+      formatBytes(blob.size) + " " +
+      sizeDelta(originalFile.size, blob.size);
+
+    comparisonCard.classList.add("visible");
+
+    // Parse EXIF on output to confirm it's stripped
+    var blobReader = new FileReader();
+    blobReader.onload = function(ev) {
+      var outTags = parseExif(ev.target.result);
+      renderExifTable(outTags, exifResized);
+    };
+    blobReader.readAsArrayBuffer(blob);
+  });
+
   // --- Download (separate) ---
 
   downloadBtn.addEventListener("click", function() {
     if (!lastBlobUrl) return;
     var a = document.createElement("a");
     a.href = lastBlobUrl;
-    a.download = "resized." + lastBlobExt;
+    var baseName = originalFile ? originalFile.name.replace(/\.[^.]+$/, "") : "image";
+    a.download = baseName + "-output." + lastBlobExt;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
