@@ -689,8 +689,13 @@
     if (msg.type === "ready") {
       workerReady = true;
       engineStatus.textContent = "wasm-vips ready (Lanczos3)";
+      engineStatus.classList.remove("error");
       engineStatus.classList.add("ready");
       if (originalImage) resizeBtn.disabled = false;
+    } else if (msg.type === "error-init") {
+      engineStatus.textContent = "Engine error: " + msg.error;
+      engineStatus.classList.add("error");
+      console.error("[wasm-vips]", msg.error);
     } else if (msg.type === "result") {
       var cb = pendingResizes[msg.id];
       delete pendingResizes[msg.id];
@@ -702,9 +707,10 @@
     }
   };
 
-  worker.onerror = function () {
-    engineStatus.textContent = "Failed to load wasm-vips";
+  worker.onerror = function (e) {
+    engineStatus.textContent = "Worker error: " + (e.message || "unknown");
     engineStatus.classList.add("error");
+    console.error("[wasm-vips worker]", e);
   };
 
   function workerResize(arrayBuffer, width, height, format, quality, callback) {
