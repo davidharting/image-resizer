@@ -13,18 +13,22 @@ function initVips() {
     if (typeof Vips === "undefined") {
       vipsReady = Promise.reject(new Error("Vips global not found — importScripts may have failed"));
     } else {
-      vipsReady = Vips({
-        dynamicLibraries: [],
-        locateFile: function (fileName) {
-          return "https://cdn.jsdelivr.net/npm/wasm-vips@0.0.16/lib/" + fileName;
-        },
-      }).then(function (v) {
-        postMessage({ type: "ready" });
-        return v;
-      }).catch(function (err) {
-        postMessage({ type: "error-init", error: "Vips init failed: " + err.message });
-        throw err;
-      });
+      vipsReady = fetch("https://cdn.jsdelivr.net/npm/wasm-vips@0.0.16/lib/vips.wasm")
+        .then(function (resp) {
+          if (!resp.ok) throw new Error("Failed to fetch vips.wasm: " + resp.status);
+          return resp.arrayBuffer();
+        })
+        .then(function (wasmBinary) {
+          return Vips({ dynamicLibraries: [], wasmBinary: wasmBinary });
+        })
+        .then(function (v) {
+          postMessage({ type: "ready" });
+          return v;
+        })
+        .catch(function (err) {
+          postMessage({ type: "error-init", error: "Vips init failed: " + err.message });
+          throw err;
+        });
     }
   }
   return vipsReady;
