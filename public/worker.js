@@ -13,7 +13,13 @@ function initVips() {
     if (typeof Vips === "undefined") {
       vipsReady = Promise.reject(new Error("Vips global not found — importScripts may have failed"));
     } else {
-      vipsReady = Vips({ dynamicLibraries: [] }).then(function (v) {
+      vipsReady = Vips({
+        dynamicLibraries: [],
+        // Emscripten sets _scriptName = self.location.href inside workers,
+        // which resolves to worker.js — not vips.js. The pthread sub-workers
+        // would then load worker.js and hang. Point them to the correct file.
+        mainScriptUrlOrBlob: new URL("vips.js", self.location.href).href,
+      }).then(function (v) {
           postMessage({ type: "ready" });
           return v;
         })
