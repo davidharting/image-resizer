@@ -13,7 +13,12 @@ function initVips() {
     if (typeof Vips === "undefined") {
       vipsReady = Promise.reject(new Error("Vips global not found — importScripts may have failed"));
     } else {
-      vipsReady = Vips({ dynamicLibraries: [] }).then(function (v) {
+      vipsReady = Vips({
+        dynamicLibraries: [],
+        locateFile: function (fileName) {
+          return "https://cdn.jsdelivr.net/npm/wasm-vips@0.0.16/lib/" + fileName;
+        },
+      }).then(function (v) {
         postMessage({ type: "ready" });
         return v;
       }).catch(function (err) {
