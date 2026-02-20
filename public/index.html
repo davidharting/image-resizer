@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image Resizer</title>
+  <script src="coi-serviceworker.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    h1 { font-size: 1.8rem; margin-bottom: 0.25rem; }
+    .subtitle { color: #666; font-size: 0.95rem; margin-bottom: 1.5rem; max-width: 720px; text-align: center; line-height: 1.5; }
+
+    .container { width: 100%; max-width: 720px; }
+
+    /* Drop zone */
+    .dropzone {
+      border: 2px dashed #aaa;
+      border-radius: 12px;
+      padding: 3rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      background: #fff;
+    }
+    .dropzone.active { border-color: #4a90d9; background: #eef4fc; }
+    .dropzone p { font-size: 1rem; color: #666; }
+    .dropzone .hint { font-size: 0.8rem; color: #999; margin-top: 0.5rem; }
+    .dropzone input { display: none; }
+
+    /* Card shared style */
+    .card {
+      display: none;
+      margin-top: 1.5rem;
+      background: #fff;
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+    .card.visible { display: block; }
+    .card h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+
+    /* Source info card */
+    .source-info table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .source-info td { padding: 0.35rem 0; }
+    .source-info td:first-child { font-weight: 600; width: 130px; color: #555; }
+    .source-info td:last-child { color: #333; }
+
+    /* Controls */
+    .field { margin-bottom: 1.15rem; }
+    .field label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.9rem; }
+    .field .help { font-size: 0.8rem; color: #888; margin-bottom: 0.4rem; line-height: 1.4; }
+    .field input[type="number"] {
+      width: 100px;
+      padding: 0.4rem 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 0.95rem;
+    }
+    .field .dimensions { display: flex; align-items: center; gap: 0.5rem; }
+    .field .dimensions span { color: #999; }
+
+    .lock-btn {
+      background: none;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 0.3rem 0.5rem;
+      cursor: pointer;
+      font-size: 0.85rem;
+      color: #555;
+    }
+    .lock-btn.locked { background: #eef4fc; border-color: #4a90d9; color: #4a90d9; }
+
+    .field select, .field input[type="range"] {
+      padding: 0.4rem 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 0.95rem;
+    }
+    .field input[type="range"] { width: 200px; vertical-align: middle; }
+
+    .quality-value { font-size: 0.85rem; color: #666; margin-left: 0.5rem; }
+
+    .actions { display: flex; gap: 0.75rem; margin-top: 1.25rem; flex-wrap: wrap; }
+
+    button.primary {
+      background: #4a90d9; color: #fff; border: none; border-radius: 8px;
+      padding: 0.6rem 1.4rem; font-size: 0.95rem; cursor: pointer; font-weight: 600;
+    }
+    button.primary:hover { background: #3a7cc3; }
+    button.primary:disabled { background: #a0c4e8; cursor: default; }
+    button.secondary {
+      background: #fff; border: 1px solid #ccc; border-radius: 8px;
+      padding: 0.6rem 1.4rem; font-size: 0.95rem; cursor: pointer;
+    }
+    button.secondary:hover { background: #f0f0f0; }
+    button.download {
+      background: #2ea44f; color: #fff; border: none; border-radius: 8px;
+      padding: 0.6rem 1.4rem; font-size: 0.95rem; cursor: pointer; font-weight: 600;
+    }
+    button.download:hover { background: #278c41; }
+    button.strip {
+      background: #6f42c1; color: #fff; border: none; border-radius: 8px;
+      padding: 0.6rem 1.4rem; font-size: 0.95rem; cursor: pointer; font-weight: 600;
+    }
+    button.strip:hover { background: #5a32a3; }
+    button.strip:disabled { background: #b8a2d8; cursor: default; }
+
+    /* Comparison */
+    .comparison { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .comparison .col { flex: 1; min-width: 240px; }
+    .comparison .col h3 { font-size: 0.95rem; margin-bottom: 0.5rem; color: #555; }
+    .comparison img {
+      max-width: 100%; max-height: 300px; border-radius: 8px; border: 1px solid #eee;
+    }
+    .comparison .stats {
+      margin-top: 0.5rem; font-size: 0.82rem; color: #666; line-height: 1.6;
+    }
+    .comparison .stats .delta {
+      display: inline-block; padding: 0.1rem 0.4rem; border-radius: 4px;
+      font-weight: 600; font-size: 0.78rem; margin-left: 0.35rem;
+    }
+    .comparison .stats .delta.smaller { background: #e6f4ea; color: #1a7f37; }
+    .comparison .stats .delta.larger { background: #fce8e6; color: #c5221f; }
+    .comparison .stats .delta.same { background: #eee; color: #666; }
+
+    /* Engine status */
+    .engine-status {
+      display: inline-block;
+      margin-bottom: 1rem;
+      font-size: 0.82rem;
+      padding: 0.25rem 0.7rem;
+      border-radius: 999px;
+      background: #fff3cd;
+      color: #856404;
+    }
+    .engine-status.ready { background: #d4edda; color: #155724; }
+    .engine-status.error { background: #f8d7da; color: #721c24; }
+
+    button.primary:disabled { background: #a0c4e8; cursor: default; }
+    .resize-spinner { display: none; margin-left: 0.5rem; }
+    .resize-spinner.active { display: inline-block; }
+
+    .download-row {
+      margin-top: 1rem;
+      text-align: center;
+    }
+
+    /* EXIF card */
+    .exif-comparison { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .exif-comparison .col { flex: 1; min-width: 240px; }
+    .exif-comparison .col h3 { font-size: 0.95rem; margin-bottom: 0.5rem; color: #555; }
+    .exif-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .exif-table td { padding: 0.25rem 0.4rem; border-bottom: 1px solid #f0f0f0; }
+    .exif-table td:first-child { font-weight: 600; color: #555; white-space: nowrap; width: 40%; }
+    .exif-table td:last-child { color: #333; word-break: break-word; }
+    .exif-none { font-size: 0.85rem; color: #999; font-style: italic; }
+
+    /* How it works */
+    .how-it-works {
+      margin-top: 2rem;
+      background: #fff;
+      border-radius: 12px;
+      padding: 1.5rem;
+      max-width: 720px;
+      width: 100%;
+    }
+    .how-it-works h2 { font-size: 1.1rem; margin-bottom: 0.75rem; }
+    .how-it-works h3 { font-size: 0.95rem; margin-top: 1rem; margin-bottom: 0.35rem; color: #444; }
+    .how-it-works p, .how-it-works li {
+      font-size: 0.85rem; color: #555; line-height: 1.6;
+    }
+    .how-it-works ul { padding-left: 1.25rem; margin-top: 0.25rem; }
+    .how-it-works li { margin-bottom: 0.25rem; }
+    .how-it-works code {
+      background: #f0f0f0; padding: 0.1rem 0.35rem; border-radius: 3px;
+      font-size: 0.82rem;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Image Resizer</h1>
+<p class="subtitle">
+  Upload any image, resize it to exact pixel dimensions, and convert between
+  PNG, JPEG, and WebP &mdash; all processed locally in your browser using
+  <strong>libvips</strong> (via WebAssembly) for high-quality Lanczos resampling.
+  Nothing is uploaded to a server.
+</p>
+<div class="engine-status" id="engineStatus">Loading wasm-vips engine&hellip;</div>
+
+<div class="container">
+
+  <!-- Upload -->
+  <div class="dropzone" id="dropzone">
+    <p>Drop an image here or click to upload</p>
+    <p class="hint">Supports any browser-readable image: PNG, JPEG, GIF, WebP, BMP, SVG, etc.</p>
+    <input type="file" id="fileInput" accept="image/*">
+  </div>
+
+  <!-- Source info -->
+  <div class="card source-info" id="sourceInfo">
+    <h2>Uploaded Image</h2>
+    <table>
+      <tr><td>File name</td><td id="srcName">-</td></tr>
+      <tr><td>MIME type</td><td id="srcType">-</td></tr>
+      <tr><td>File size</td><td id="srcSize">-</td></tr>
+      <tr><td>Dimensions</td><td id="srcDims">-</td></tr>
+    </table>
+  </div>
+
+  <!-- Controls -->
+  <div class="card" id="controls">
+    <h2>Resize Settings</h2>
+
+    <div class="field">
+      <label>Dimensions (px)</label>
+      <p class="help">
+        Set the output width and height in pixels. When the lock is active,
+        changing one value automatically adjusts the other to preserve the
+        original aspect ratio, preventing distortion.
+      </p>
+      <div class="dimensions">
+        <input type="number" id="widthInput" min="1" placeholder="Width">
+        <span>&times;</span>
+        <input type="number" id="heightInput" min="1" placeholder="Height">
+        <button class="lock-btn locked" id="lockAspect" title="Lock aspect ratio">Lock</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Output Format</label>
+      <p class="help">
+        Choose the image encoding for the output file.
+        <strong>PNG</strong> is lossless and best for graphics, icons, or screenshots.
+        <strong>JPEG</strong> uses lossy compression and is best for photographs.
+        <strong>WebP</strong> is a modern format offering smaller files than JPEG at comparable quality.
+      </p>
+      <select id="formatSelect">
+        <option value="image/png">PNG</option>
+        <option value="image/jpeg" selected>JPEG</option>
+        <option value="image/webp">WebP</option>
+      </select>
+    </div>
+
+    <div class="field" id="qualityField">
+      <label>Quality <span class="quality-value" id="qualityValue">92%</span></label>
+      <p class="help">
+        Controls the lossy compression level. Higher values preserve more detail
+        but produce larger files. Lower values reduce file size at the cost of
+        visible artifacts. This setting only applies to JPEG and WebP.
+      </p>
+      <input type="range" id="qualityRange" min="1" max="100" value="92">
+    </div>
+
+    <div class="actions">
+      <button class="primary" id="resizeBtn" disabled>Resize<span class="resize-spinner" id="resizeSpinner"> &#8987;</span></button>
+      <button class="strip" id="stripExifBtn">Strip EXIF Only</button>
+      <button class="secondary" id="resetBtn">Reset</button>
+    </div>
+  </div>
+
+  <!-- Side-by-side comparison -->
+  <div class="card" id="comparisonCard">
+    <h2>Comparison</h2>
+    <div class="comparison">
+      <div class="col">
+        <h3>Original</h3>
+        <img id="origImg">
+        <div class="stats" id="origStats"></div>
+      </div>
+      <div class="col">
+        <h3>Resized</h3>
+        <img id="resizedImg">
+        <div class="stats" id="resizedStats"></div>
+      </div>
+    </div>
+    <div class="download-row">
+      <button class="download" id="downloadBtn">Download Resized Image</button>
+    </div>
+  </div>
+
+  <!-- EXIF comparison -->
+  <div class="card" id="exifCard">
+    <h2>EXIF Metadata</h2>
+    <div class="exif-comparison">
+      <div class="col">
+        <h3>Original</h3>
+        <div id="exifOriginal"><span class="exif-none">No image loaded</span></div>
+      </div>
+      <div class="col">
+        <h3>Resized</h3>
+        <div id="exifResized"><span class="exif-none">No resize performed</span></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- .container -->
+
+<!-- How it works -->
+<div class="how-it-works">
+  <h2>How It Works</h2>
+  <p>
+    This tool runs entirely in your browser. Your images are never sent to a
+    server &mdash; all processing happens client-side using
+    <a href="https://github.com/kleisauke/wasm-vips" target="_blank">wasm-vips</a>,
+    a WebAssembly build of <strong>libvips</strong>, the same high-performance
+    image processing library used by sharp (Node.js) and many server-side pipelines.
+  </p>
+
+  <h3>Loading the engine</h3>
+  <p>
+    On first visit, the browser downloads a ~4.5 MB WebAssembly module
+    (<code>vips.wasm</code>) from a CDN and compiles it inside a
+    <strong>Web Worker</strong>. This keeps the UI responsive while the engine
+    initializes. Once loaded, the status badge turns green and the Resize button
+    becomes active. The browser caches the WASM file, so subsequent visits load
+    almost instantly.
+  </p>
+
+  <h3>Reading the file</h3>
+  <p>
+    When you upload or drop an image, the browser's
+    <code>FileReader</code> API reads it as both an <code>ArrayBuffer</code>
+    (sent to the worker for processing) and a data URL (used for the preview
+    thumbnail). The raw bytes are passed directly to libvips, which can decode
+    JPEG, PNG, WebP, TIFF, GIF, and many other formats natively.
+  </p>
+
+  <h3>Resizing</h3>
+  <p>
+    The worker calls <code>vips.Image.thumbnailBuffer()</code>, which is
+    significantly more efficient than a na&iuml;ve decode-then-resize pipeline.
+    For JPEG inputs, it exploits the format's built-in 2&times;/4&times;/8&times;
+    shrink-on-load, drastically reducing memory use and CPU time for large
+    downscales. The resampling kernel is <strong>Lanczos3</strong>, a
+    high-quality windowed sinc filter that preserves sharp edges and fine detail
+    far better than the bilinear interpolation used by the HTML Canvas API.
+  </p>
+
+  <h3>Format conversion &amp; encoding</h3>
+  <p>
+    After resizing, libvips encodes the result into the chosen format:
+  </p>
+  <ul>
+    <li>
+      <strong>PNG</strong> &mdash; Lossless compression using the DEFLATE
+      algorithm. Every pixel is preserved exactly, which makes files larger but
+      guarantees no quality loss. The quality slider has no effect.
+    </li>
+    <li>
+      <strong>JPEG</strong> &mdash; Lossy compression with optimized Huffman
+      coding enabled. The quality slider controls quantization &mdash; lower
+      values discard more frequency coefficients, producing smaller files with
+      more visible artifacts.
+    </li>
+    <li>
+      <strong>WebP</strong> &mdash; A modern format using predictive coding and
+      arithmetic entropy coding, typically achieving 25&ndash;35% smaller files
+      than JPEG at equivalent visual quality. The quality slider works the same
+      way as for JPEG.
+    </li>
+  </ul>
+
+  <h3>EXIF metadata &amp; ICC profiles</h3>
+  <p>
+    When resizing, EXIF data (camera model, GPS coordinates, date/time, etc.)
+    is <strong>stripped</strong> from the output for privacy, while
+    <strong>ICC color profiles are preserved</strong> so images maintain
+    accurate color rendering across displays. This is controlled via the
+    <code>ForeignKeep.icc</code> flag in libvips.
+  </p>
+
+  <h3>Strip EXIF Only (lossless)</h3>
+  <p>
+    The <strong>Strip EXIF Only</strong> button removes EXIF metadata from a
+    JPEG <em>without re-encoding</em>. It works at the binary level: the JPEG
+    file is parsed segment-by-segment, and any APP1/Exif segments are removed
+    while the compressed image data is left completely untouched. This means
+    <strong>zero generation loss</strong> &mdash; every pixel remains
+    bit-identical to the original. The file size will decrease slightly (by the
+    size of the removed metadata). This is ideal when you just want to strip
+    GPS coordinates or camera info before sharing a photo.
+  </p>
+
+  <h3>Download</h3>
+  <p>
+    The encoded bytes are transferred from the worker back to the main thread,
+    wrapped in a <code>Blob</code>, and turned into an object URL
+    (<code>URL.createObjectURL</code>). Clicking Download triggers the
+    browser's native file-save dialog.
+  </p>
+
+  <h3>Privacy</h3>
+  <p>
+    Your image data never leaves the browser. The WASM engine, Web Worker, and
+    all encoding happen in local memory. Refreshing or closing the page
+    discards all data. The only network request is fetching the wasm-vips
+    library itself from a CDN.
+  </p>
+</div>
+
+<script>
+(function () {
+  // --- EXIF parser (JPEG only, reads APP1/Exif segment) ---
+
+  const EXIF_TAGS = {
+    0x010F: "Camera Make",
+    0x0110: "Camera Model",
+    0x0112: "Orientation",
+    0x011A: "X Resolution",
+    0x011B: "Y Resolution",
+    0x0128: "Resolution Unit",
+    0x0131: "Software",
+    0x0132: "Date/Time",
+    0x013B: "Artist",
+    0x8298: "Copyright",
+    0x829A: "Exposure Time",
+    0x829D: "F-Number",
+    0x8827: "ISO Speed",
+    0x9003: "Date Original",
+    0x9004: "Date Digitized",
+    0x920A: "Focal Length",
+    0xA001: "Color Space",
+    0xA002: "Pixel X Dimension",
+    0xA003: "Pixel Y Dimension",
+    0xA405: "Focal Length (35mm)",
+    // GPS
+    0x0001: "GPS Latitude Ref",
+    0x0002: "GPS Latitude",
+    0x0003: "GPS Longitude Ref",
+    0x0004: "GPS Longitude",
+    0x0005: "GPS Altitude Ref",
+    0x0006: "GPS Altitude",
+  };
+
+  function parseExif(arrayBuffer) {
+    var dv = new DataView(arrayBuffer);
+    // Verify JPEG SOI
+    if (dv.getUint16(0) !== 0xFFD8) return null;
+
+    var offset = 2;
+    while (offset < dv.byteLength - 1) {
+      var marker = dv.getUint16(offset);
+      if (marker === 0xFFE1) { // APP1
+        var length = dv.getUint16(offset + 2);
+        // Check for "Exif\0\0"
+        var exifHeader = String.fromCharCode(
+          dv.getUint8(offset + 4), dv.getUint8(offset + 5),
+          dv.getUint8(offset + 6), dv.getUint8(offset + 7)
+        );
+        if (exifHeader === "Exif") {
+          return readIFD(dv, offset + 10);
+        }
+        offset += 2 + length;
+      } else if ((marker & 0xFF00) === 0xFF00) {
+        if (marker === 0xFFDA) break; // Start of scan, stop
+        var segLen = dv.getUint16(offset + 2);
+        offset += 2 + segLen;
+      } else {
+        break;
+      }
+    }
+    return null;
+  }
+
+  function readIFD(dv, tiffStart) {
+    var bigEndian = dv.getUint16(tiffStart) === 0x4D4D;
+    var g16 = function(o) { return bigEndian ? dv.getUint16(o) : dv.getUint16(o, true); };
+    var g32 = function(o) { return bigEndian ? dv.getUint32(o) : dv.getUint32(o, true); };
+
+    var ifdOffset = g32(tiffStart + 4);
+    var tags = {};
+
+    function processIFD(offset) {
+      if (offset + 2 > dv.byteLength) return;
+      var entries = g16(tiffStart + offset);
+      for (var i = 0; i < entries; i++) {
+        var entryOffset = tiffStart + offset + 2 + i * 12;
+        if (entryOffset + 12 > dv.byteLength) break;
+        var tag = g16(entryOffset);
+        var type = g16(entryOffset + 2);
+        var count = g32(entryOffset + 4);
+        var valueOffset = entryOffset + 8;
+
+        var tagName = EXIF_TAGS[tag];
+        if (!tagName) continue;
+
+        var val;
+        if (type === 2) { // ASCII
+          var strOffset = count > 4 ? tiffStart + g32(valueOffset) : valueOffset;
+          var str = "";
+          for (var s = 0; s < count - 1 && strOffset + s < dv.byteLength; s++) {
+            str += String.fromCharCode(dv.getUint8(strOffset + s));
+          }
+          val = str;
+        } else if (type === 3) { // SHORT
+          val = g16(valueOffset);
+        } else if (type === 4) { // LONG
+          val = g32(valueOffset);
+        } else if (type === 5) { // RATIONAL
+          var ratOffset = tiffStart + g32(valueOffset);
+          if (ratOffset + 8 <= dv.byteLength) {
+            var num = g32(ratOffset);
+            var den = g32(ratOffset + 4);
+            if (count > 1 && tag >= 0x0001 && tag <= 0x0006) {
+              // GPS coordinates: read multiple rationals
+              var parts = [];
+              for (var r = 0; r < count && r < 3; r++) {
+                var ro = ratOffset + r * 8;
+                if (ro + 8 <= dv.byteLength) {
+                  parts.push(g32(ro) / (g32(ro + 4) || 1));
+                }
+              }
+              val = parts.map(function(v) { return Math.round(v * 10000) / 10000; }).join(", ");
+            } else {
+              val = den ? (Math.round((num / den) * 10000) / 10000).toString() : num.toString();
+            }
+          }
+        } else if (type === 10) { // SRATIONAL
+          var sratOffset = tiffStart + g32(valueOffset);
+          if (sratOffset + 8 <= dv.byteLength) {
+            var snum = dv.getInt32(sratOffset, !bigEndian);
+            var sden = dv.getInt32(sratOffset + 4, !bigEndian);
+            val = sden ? (Math.round((snum / sden) * 10000) / 10000).toString() : snum.toString();
+          }
+        }
+
+        if (val !== undefined) tags[tagName] = val;
+      }
+    }
+
+    processIFD(ifdOffset);
+
+    // Check for Exif sub-IFD
+    // We already have the main IFD tags, look for sub-IFD pointer (tag 0x8769)
+    var subIFDOffset = tiffStart + ifdOffset + 2;
+    var mainEntries = g16(tiffStart + ifdOffset);
+    for (var j = 0; j < mainEntries; j++) {
+      var eo = tiffStart + ifdOffset + 2 + j * 12;
+      if (eo + 12 > dv.byteLength) break;
+      var t = g16(eo);
+      if (t === 0x8769) { // ExifIFDPointer
+        processIFD(g32(eo + 8));
+      } else if (t === 0x8825) { // GPSInfoIFDPointer
+        processIFD(g32(eo + 8));
+      }
+    }
+
+    return Object.keys(tags).length > 0 ? tags : null;
+  }
+
+  function renderExifTable(tags, container) {
+    if (!tags) {
+      container.innerHTML = '<span class="exif-none">No EXIF data found</span>';
+      return;
+    }
+    var html = '<table class="exif-table">';
+    var keys = Object.keys(tags);
+    for (var i = 0; i < keys.length; i++) {
+      html += "<tr><td>" + keys[i] + "</td><td>" + escapeHtml(String(tags[keys[i]])) + "</td></tr>";
+    }
+    html += "</table>";
+    container.innerHTML = html;
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  // --- Lossless binary EXIF strip (JPEG only) ---
+  // Removes APP1 (Exif) segments from JPEG bytes without re-encoding.
+  // Non-JPEG files are returned unchanged.
+
+  function stripExifBinary(arrayBuffer) {
+    var src = new Uint8Array(arrayBuffer);
+    // Must start with JPEG SOI marker FF D8
+    if (src.length < 4 || src[0] !== 0xFF || src[1] !== 0xD8) return arrayBuffer;
+
+    var pieces = [];
+    pieces.push(src.subarray(0, 2)); // SOI
+
+    var offset = 2;
+    while (offset < src.length - 1) {
+      if (src[offset] !== 0xFF) break;
+      var marker = (src[offset] << 8) | src[offset + 1];
+
+      // SOS (FF DA) — rest is image data, copy everything remaining
+      if (marker === 0xFFDA) {
+        pieces.push(src.subarray(offset));
+        break;
+      }
+
+      // Segments with length field
+      if (offset + 3 >= src.length) break;
+      var segLen = (src[offset + 2] << 8) | src[offset + 3];
+      var segEnd = offset + 2 + segLen;
+
+      if (marker === 0xFFE1) {
+        // APP1 — check if it's an Exif segment
+        var isExif = (offset + 7 < src.length &&
+          src[offset + 4] === 0x45 && // E
+          src[offset + 5] === 0x78 && // x
+          src[offset + 6] === 0x69 && // i
+          src[offset + 7] === 0x66);  // f
+        if (isExif) {
+          // Skip this segment entirely (strip it)
+          offset = segEnd;
+          continue;
+        }
+      }
+
+      // Keep this segment
+      pieces.push(src.subarray(offset, segEnd));
+      offset = segEnd;
+    }
+
+    // Concatenate pieces
+    var totalLen = 0;
+    for (var i = 0; i < pieces.length; i++) totalLen += pieces[i].length;
+    var out = new Uint8Array(totalLen);
+    var pos = 0;
+    for (var j = 0; j < pieces.length; j++) {
+      out.set(pieces[j], pos);
+      pos += pieces[j].length;
+    }
+    return out.buffer;
+  }
+
+  // --- DOM refs ---
+
+  var dropzone = document.getElementById("dropzone");
+  var fileInput = document.getElementById("fileInput");
+  var sourceInfo = document.getElementById("sourceInfo");
+  var srcName = document.getElementById("srcName");
+  var srcType = document.getElementById("srcType");
+  var srcSize = document.getElementById("srcSize");
+  var srcDims = document.getElementById("srcDims");
+  var controls = document.getElementById("controls");
+  var widthInput = document.getElementById("widthInput");
+  var heightInput = document.getElementById("heightInput");
+  var lockAspect = document.getElementById("lockAspect");
+  var formatSelect = document.getElementById("formatSelect");
+  var qualityField = document.getElementById("qualityField");
+  var qualityRange = document.getElementById("qualityRange");
+  var qualityValue = document.getElementById("qualityValue");
+  var resizeBtn = document.getElementById("resizeBtn");
+  var stripExifBtn = document.getElementById("stripExifBtn");
+  var resetBtn = document.getElementById("resetBtn");
+  var comparisonCard = document.getElementById("comparisonCard");
+  var origImg = document.getElementById("origImg");
+  var origStats = document.getElementById("origStats");
+  var resizedImg = document.getElementById("resizedImg");
+  var resizedStats = document.getElementById("resizedStats");
+  var downloadBtn = document.getElementById("downloadBtn");
+  var exifCard = document.getElementById("exifCard");
+  var exifOriginal = document.getElementById("exifOriginal");
+  var exifResized = document.getElementById("exifResized");
+
+  var originalImage = null;
+  var originalFile = null;
+  var originalArrayBuffer = null;
+  var lastBlobUrl = null;
+  var lastBlobExt = null;
+  var aspectRatio = 1;
+  var lockRatio = true;
+  var updatingDimension = false;
+  var workerReady = false;
+  var resizeIdCounter = 0;
+  var pendingResizes = {};
+
+  // --- Web Worker setup ---
+
+  var engineStatus = document.getElementById("engineStatus");
+  var resizeSpinner = document.getElementById("resizeSpinner");
+  var worker = new Worker("worker.js");
+
+  worker.onmessage = function (e) {
+    var msg = e.data;
+    if (msg.type === "ready") {
+      workerReady = true;
+      engineStatus.textContent = "wasm-vips ready (Lanczos3)";
+      engineStatus.classList.remove("error");
+      engineStatus.classList.add("ready");
+      if (originalImage) resizeBtn.disabled = false;
+    } else if (msg.type === "error-init") {
+      engineStatus.textContent = "Engine error: " + msg.error;
+      engineStatus.classList.add("error");
+      console.error("[wasm-vips]", msg.error);
+    } else if (msg.type === "result") {
+      var cb = pendingResizes[msg.id];
+      delete pendingResizes[msg.id];
+      if (cb) cb(null, new Blob([msg.buffer], { type: msg.format }));
+    } else if (msg.type === "error") {
+      var ecb = pendingResizes[msg.id];
+      delete pendingResizes[msg.id];
+      if (ecb) ecb(new Error(msg.error));
+    }
+  };
+
+  worker.onerror = function (e) {
+    engineStatus.textContent = "Worker error: " + (e.message || "unknown");
+    engineStatus.classList.add("error");
+    console.error("[wasm-vips worker]", e);
+  };
+
+  function workerResize(arrayBuffer, width, height, format, quality, callback) {
+    var id = ++resizeIdCounter;
+    pendingResizes[id] = callback;
+    var copy = arrayBuffer.slice(0);
+    worker.postMessage(
+      { id: id, inputBuffer: copy, width: width, height: height, format: format, quality: quality },
+      [copy]
+    );
+  }
+
+  // --- Helpers ---
+
+  function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+  }
+
+  function sizeDelta(original, resized) {
+    if (original === resized) return '<span class="delta same">same size</span>';
+    var pct = Math.abs(((resized - original) / original) * 100).toFixed(1);
+    if (resized < original) return '<span class="delta smaller">' + pct + "% smaller</span>";
+    return '<span class="delta larger">' + pct + "% larger</span>";
+  }
+
+  // --- Upload handling ---
+
+  dropzone.addEventListener("click", function() { fileInput.click(); });
+  fileInput.addEventListener("change", function() {
+    if (fileInput.files.length) loadFile(fileInput.files[0]);
+  });
+  dropzone.addEventListener("dragover", function(e) { e.preventDefault(); dropzone.classList.add("active"); });
+  dropzone.addEventListener("dragleave", function() { dropzone.classList.remove("active"); });
+  dropzone.addEventListener("drop", function(e) {
+    e.preventDefault();
+    dropzone.classList.remove("active");
+    var file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith("image/")) loadFile(file);
+  });
+
+  function loadFile(file) {
+    originalFile = file;
+
+    // Read as ArrayBuffer for EXIF parsing + worker input
+    var bufReader = new FileReader();
+    bufReader.onload = function(ev) {
+      originalArrayBuffer = ev.target.result;
+      var exifTags = parseExif(originalArrayBuffer);
+      renderExifTable(exifTags, exifOriginal);
+      exifResized.innerHTML = '<span class="exif-none">No resize performed yet</span>';
+      exifCard.classList.add("visible");
+    };
+    bufReader.readAsArrayBuffer(file);
+
+    // Read as data URL for display
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var img = new Image();
+      img.onload = function() {
+        originalImage = img;
+        aspectRatio = img.width / img.height;
+        widthInput.value = img.width;
+        heightInput.value = img.height;
+
+        srcName.textContent = file.name;
+        srcType.textContent = file.type || "unknown";
+        srcSize.textContent = formatBytes(file.size);
+        srcDims.textContent = img.width + " \u00d7 " + img.height + " px";
+        sourceInfo.classList.add("visible");
+        controls.classList.add("visible");
+        resizeBtn.disabled = !workerReady;
+
+        comparisonCard.classList.remove("visible");
+        lastBlobUrl = null;
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // --- Dimension locking ---
+
+  lockAspect.addEventListener("click", function() {
+    lockRatio = !lockRatio;
+    lockAspect.classList.toggle("locked", lockRatio);
+  });
+
+  widthInput.addEventListener("input", function() {
+    if (updatingDimension) return;
+    if (lockRatio && originalImage) {
+      updatingDimension = true;
+      heightInput.value = Math.round(Number(widthInput.value) / aspectRatio);
+      updatingDimension = false;
+    }
+  });
+
+  heightInput.addEventListener("input", function() {
+    if (updatingDimension) return;
+    if (lockRatio && originalImage) {
+      updatingDimension = true;
+      widthInput.value = Math.round(Number(heightInput.value) * aspectRatio);
+      updatingDimension = false;
+    }
+  });
+
+  // --- Format / quality ---
+
+  formatSelect.addEventListener("change", function() {
+    var fmt = formatSelect.value;
+    qualityField.style.display = (fmt === "image/jpeg" || fmt === "image/webp") ? "" : "none";
+  });
+
+  qualityRange.addEventListener("input", function() {
+    qualityValue.textContent = qualityRange.value + "%";
+  });
+
+  // --- Resize via wasm-vips worker ---
+
+  resizeBtn.addEventListener("click", function() {
+    if (!originalImage || !originalArrayBuffer || !workerReady) return;
+    var w = Number(widthInput.value) || originalImage.width;
+    var h = Number(heightInput.value) || originalImage.height;
+    var fmt = formatSelect.value;
+    var q = (fmt === "image/jpeg" || fmt === "image/webp") ? Number(qualityRange.value) : 85;
+
+    resizeBtn.disabled = true;
+    resizeSpinner.classList.add("active");
+
+    workerResize(originalArrayBuffer, w, h, fmt, q, function(err, blob) {
+      resizeBtn.disabled = false;
+      resizeSpinner.classList.remove("active");
+
+      if (err) {
+        alert("Resize failed: " + err.message);
+        return;
+      }
+
+      if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
+      var url = URL.createObjectURL(blob);
+      lastBlobUrl = url;
+      lastBlobExt = fmt === "image/png" ? "png" : fmt === "image/jpeg" ? "jpg" : "webp";
+
+      // Build comparison
+      origImg.src = originalImage.src;
+      var origType = originalFile ? (originalFile.type || "unknown") : "unknown";
+      origStats.innerHTML =
+        originalImage.width + " &times; " + originalImage.height + " px<br>" +
+        origType + "<br>" +
+        formatBytes(originalFile ? originalFile.size : 0);
+
+      var fmtLabel = fmt === "image/png" ? "PNG" : fmt === "image/jpeg" ? "JPEG" : "WebP";
+      resizedImg.src = url;
+      resizedStats.innerHTML =
+        w + " &times; " + h + " px<br>" +
+        fmtLabel + "<br>" +
+        formatBytes(blob.size) + " " +
+        (originalFile ? sizeDelta(originalFile.size, blob.size) : "");
+
+      comparisonCard.classList.add("visible");
+
+      // Parse EXIF on the output blob to confirm metadata is stripped
+      var blobReader = new FileReader();
+      blobReader.onload = function(ev) {
+        var outTags = parseExif(ev.target.result);
+        renderExifTable(outTags, exifResized);
+      };
+      blobReader.readAsArrayBuffer(blob);
+    });
+  });
+
+  // --- Strip EXIF only (lossless for JPEG) ---
+
+  stripExifBtn.addEventListener("click", function() {
+    if (!originalFile || !originalArrayBuffer) return;
+
+    var stripped = stripExifBinary(originalArrayBuffer);
+    var mime = originalFile.type || "application/octet-stream";
+    var blob = new Blob([stripped], { type: mime });
+
+    if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
+    var url = URL.createObjectURL(blob);
+    lastBlobUrl = url;
+
+    // Preserve original extension
+    var name = originalFile.name || "image";
+    var dotIdx = name.lastIndexOf(".");
+    lastBlobExt = dotIdx > 0 ? name.substring(dotIdx + 1) : "jpg";
+
+    // Build comparison
+    origImg.src = originalImage ? originalImage.src : "";
+    var origType = originalFile.type || "unknown";
+    var origW = originalImage ? originalImage.width : "?";
+    var origH = originalImage ? originalImage.height : "?";
+    origStats.innerHTML =
+      origW + " &times; " + origH + " px<br>" +
+      origType + "<br>" +
+      formatBytes(originalFile.size);
+
+    resizedImg.src = url;
+    resizedStats.innerHTML =
+      origW + " &times; " + origH + " px (unchanged)<br>" +
+      origType + "<br>" +
+      formatBytes(blob.size) + " " +
+      sizeDelta(originalFile.size, blob.size);
+
+    comparisonCard.classList.add("visible");
+
+    // Parse EXIF on output to confirm it's stripped
+    var blobReader = new FileReader();
+    blobReader.onload = function(ev) {
+      var outTags = parseExif(ev.target.result);
+      renderExifTable(outTags, exifResized);
+    };
+    blobReader.readAsArrayBuffer(blob);
+  });
+
+  // --- Download (separate) ---
+
+  downloadBtn.addEventListener("click", function() {
+    if (!lastBlobUrl) return;
+    var a = document.createElement("a");
+    a.href = lastBlobUrl;
+    var baseName = originalFile ? originalFile.name.replace(/\.[^.]+$/, "") : "image";
+    a.download = baseName + "-output." + lastBlobExt;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  });
+
+  // --- Reset ---
+
+  resetBtn.addEventListener("click", function() {
+    originalImage = null;
+    originalFile = null;
+    originalArrayBuffer = null;
+    if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
+    lastBlobUrl = null;
+    resizeBtn.disabled = true;
+    fileInput.value = "";
+    sourceInfo.classList.remove("visible");
+    controls.classList.remove("visible");
+    comparisonCard.classList.remove("visible");
+    exifCard.classList.remove("visible");
+    widthInput.value = "";
+    heightInput.value = "";
+    formatSelect.value = "image/jpeg";
+    qualityRange.value = 92;
+    qualityValue.textContent = "92%";
+    qualityField.style.display = "";
+  });
+})();
+</script>
+
+</body>
+</html>
