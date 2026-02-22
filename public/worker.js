@@ -60,23 +60,29 @@ self.onmessage = async function (e) {
     let outputBytes;
     const ext = format === "image/png" ? ".png" : format === "image/webp" ? ".webp" : ".jpg";
 
+    // Keep ICC profile for accurate color rendering and EXIF for the
+    // ColorSpace tag (0xA001) which tells viewers whether the image uses
+    // sRGB, AdobeRGB, etc.  Without it some viewers assume sRGB and render
+    // wide-gamut images with dull, washed-out colours.
+    const keepFlags = vips.ForeignKeep.icc | vips.ForeignKeep.exif;
+
     if (format === "image/png") {
       outputBytes = resized.writeToBuffer(ext, {
         compression: 6,
-        keep: vips.ForeignKeep.icc,
+        keep: keepFlags,
       });
     } else if (format === "image/webp") {
       outputBytes = resized.writeToBuffer(ext, {
         Q: quality,
         effort: 4,
-        keep: vips.ForeignKeep.icc,
+        keep: keepFlags,
       });
     } else {
       // JPEG
       outputBytes = resized.writeToBuffer(ext, {
         Q: quality,
         optimize_coding: true,
-        keep: vips.ForeignKeep.icc,
+        keep: keepFlags,
       });
     }
 
